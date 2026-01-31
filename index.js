@@ -12,8 +12,30 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // ============================================
-// DATABASE CONNECTION
+// ACTIVITY TYPE CONSTANTS (for consistency)
 // ============================================
+const ACTIVITY_TYPES = {
+  PAYMENT: 'payment',
+  TOPUP: 'topup',
+  WITHDRAW: 'withdraw',
+  INVEST_BUY: 'invest_buy',
+  INVEST_SELL: 'invest_sell',
+  TRANSACTION: 'transaction'
+};
+
+// Helper function to safely log activity
+const logActivity = async (client, userId, activityType, amount, description) => {
+  try {
+    await client.query(
+      `INSERT INTO activity_logs (user_id, activity_type, amount, description)
+       VALUES ($1, $2, $3, $4)`,
+      [userId, activityType, amount, description]
+    );
+  } catch (error) {
+    console.error('Failed to log activity:', error.message);
+    // Don't throw error - activity logging shouldn't break the main operation
+  }
+};
 const pool = new Pool({
   host: process.env.DB_HOST || 'aws-1-ap-northeast-1.pooler.supabase.com',
   port: process.env.DB_PORT || 5432,
@@ -1187,10 +1209,12 @@ app.get('/api/payment/finish', async (req, res) => {
       );
 
       // Log activity
-      await pool.query(
-        `INSERT INTO activity_logs (user_id, activity_type, amount, description)
-         VALUES ($1, 'payment', $2, $3)`,
-        [order.user_id, order.total_amount, `Payment received for order ${order_id}`]
+      await logActivity(
+        pool,
+        order.user_id,
+        ACTIVITY_TYPES.PAYMENT,
+        order.total_amount,
+        `Payment received for order ${order_id}`
       );
     }
 
@@ -1737,10 +1761,12 @@ app.post('/api/wallet/topup', authenticateToken, async (req, res) => {
     );
 
     // Log activity
-    await client.query(
-      `INSERT INTO activity_logs (user_id, activity_type, amount, description)
-       VALUES ($1, 'topup', $2, 'Wallet top-up')`,
-      [req.user.userId, amount]
+    await logActivity(
+      client,
+      req.user.userId,
+      ACTIVITY_TYPES.TOPUP,
+      amount,
+      'Wallet top-up'
     );
 
     await client.query('COMMIT');
@@ -1809,10 +1835,12 @@ app.post('/api/wallet/withdraw', authenticateToken, async (req, res) => {
     );
 
     // Log activity
-    await client.query(
-      `INSERT INTO activity_logs (user_id, activity_type, amount, description)
-       VALUES ($1, 'withdraw', $2, 'Wallet withdrawal')`,
-      [req.user.userId, amount]
+    await logActivity(
+      client,
+      req.user.userId,
+      ACTIVITY_TYPES.WITHDRAW,
+      amount,
+      'Wallet withdrawal'
     );
 
     await client.query('COMMIT');
@@ -1897,10 +1925,12 @@ app.post('/api/investments', authenticateToken, async (req, res) => {
     );
 
     // Log activity
-    await client.query(
-      `INSERT INTO activity_logs (user_id, activity_type, amount, description)
-       VALUES ($1, 'invest_buy', $2, $3)`,
-      [req.user.userId, amount, `Invested ${amount} in ${asset}`]
+    await logActivity(
+      client,
+      req.user.userId,
+      ACTIVITY_TYPES.INVEST_BUY,
+      amount,
+      `Invested ${amount} in ${asset}`
     );
 
     await client.query('COMMIT');
@@ -2001,10 +2031,12 @@ app.post('/api/investments/:id/sell', authenticateToken, async (req, res) => {
     );
 
     // Log activity
-    await client.query(
-      `INSERT INTO activity_logs (user_id, activity_type, amount, description)
-       VALUES ($1, 'invest_sell', $2, $3)`,
-      [req.user.userId, sell_amount, `Sold ${investment.asset} for ${sell_amount}`]
+    await logActivity(
+      client,
+      req.user.userId,
+      ACTIVITY_TYPES.INVEST_SELL,
+      sell_amount,
+      `Sold ${investment.asset} for ${sell_amount}`
     );
 
     await client.query('COMMIT');
@@ -2381,14 +2413,12 @@ app.post('/api/transaction-history', authenticateToken, async (req, res) => {
       );
 
       // Log activity
-      await client.query(
-        `INSERT INTO activity_logs (user_id, activity_type, amount, description)
-         VALUES ($1, 'transaction_completed', $2, $3)`,
-        [
-          req.user.userId,
-          total_amount,
-          `Transaction ${order_id} completed with ${coupons_used.length} coupons`
-        ]
+      await logActivity(
+        client,
+        req.user.userId,
+        ACTIVITY_TYPES.PAYMENT,
+        total_amount,
+        `Transaction ${order_id} completed with ${coupons_used.length} coupons`
       );
     }
 
