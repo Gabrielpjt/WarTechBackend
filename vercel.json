@@ -1,57 +1,50 @@
 {
-    "version": 2,
-    "name": "warungtech-api",
-    "builds": [
+  "version": 2,
+  "name": "warungtech-api",
+
+  "functions": {
+    "src/server.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 30
+    }
+  },
+
+  "env": {
+    "NODE_ENV": "production"
+  },
+
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/src/server.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/src/server.js"
+    }
+  ],
+
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
         {
-            "src": "server.js",
-            "use": "@vercel/node"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/api/(.*)",
-            "dest": "/server.js"
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
         },
         {
-            "src": "/(.*)",
-            "dest": "/server.js"
-        }
-    ],
-    "env": {
-        "NODE_ENV": "production"
-    },
-    "functions": {
-        "server.js": {
-            "maxDuration": 30
-        }
-    },
-    "headers": [
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
         {
-            "source": "/api/(.*)",
-            "headers": [
-                {
-                    "key": "Access-Control-Allow-Origin",
-                    "value": "*"
-                },
-                {
-                    "key": "Access-Control-Allow-Methods",
-                    "value": "GET, POST, PUT, DELETE, OPTIONS"
-                },
-                {
-                    "key": "Access-Control-Allow-Headers",
-                    "value": "Content-Type, Authorization"
-                },
-                {
-                    "key": "Access-Control-Allow-Credentials",
-                    "value": "true"
-                }
-            ]
-        }
-    ],
-    "rewrites": [
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        },
         {
-            "source": "/api/(.*)",
-            "destination": "/api/$1"
+          "key": "Access-Control-Allow-Credentials",
+          "value": "true"
         }
-    ]
+      ]
+    }
+  ]
 }
