@@ -69,17 +69,17 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Access token required' 
+    return res.status(401).json({
+      success: false,
+      message: 'Access token required'
     });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Invalid or expired token' 
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid or expired token'
       });
     }
     req.user = user;
@@ -763,7 +763,7 @@ app.post('/api/tokenizer', async (req, res) => {
 
   } catch (error) {
     console.error('Error creating Midtrans transaction:', error);
-    
+
     res.status(500).json({
       success: false,
       error: 'Failed to create transaction',
@@ -884,13 +884,13 @@ app.post('/api/transaction/create', async (req, res) => {
 app.post('/api/orders/create', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { 
-      store_id, 
-      items, 
-      customer_name, 
-      customer_email, 
+    const {
+      store_id,
+      items,
+      customer_name,
+      customer_email,
       customer_phone,
-      discount = 0 
+      discount = 0
     } = req.body;
 
     // Validasi
@@ -1152,7 +1152,7 @@ app.get('/api/orders/:id', authenticateToken, async (req, res) => {
 // Callback: Payment Finished (Success)
 app.get('/api/payment/finish', async (req, res) => {
   const { order_id, transaction_status, status_code } = req.query;
-  
+
   console.log('🎉 Payment FINISH callback received');
   console.log('Order ID:', order_id);
   console.log('Transaction Status:', transaction_status);
@@ -1317,7 +1317,7 @@ app.get('/api/payment/finish', async (req, res) => {
 // Callback: Payment Error
 app.get('/api/payment/error', async (req, res) => {
   const { order_id, transaction_status, status_code } = req.query;
-  
+
   console.log('❌ Payment ERROR callback received');
   console.log('Order ID:', order_id);
   console.log('Transaction Status:', transaction_status);
@@ -1452,7 +1452,7 @@ app.get('/api/payment/error', async (req, res) => {
 // Callback: Payment Pending
 app.get('/api/payment/pending', (req, res) => {
   const { order_id, transaction_status, status_code } = req.query;
-  
+
   console.log('⏳ Payment PENDING callback received');
   console.log('Order ID:', order_id);
   console.log('Transaction Status:', transaction_status);
@@ -2068,8 +2068,8 @@ app.get('/api/financial/summary', authenticateToken, async (req, res) => {
       [req.user.userId]
     );
 
-    summary.wallet_balance = walletResult.rows.length > 0 
-      ? parseFloat(walletResult.rows[0].balance) 
+    summary.wallet_balance = walletResult.rows.length > 0
+      ? parseFloat(walletResult.rows[0].balance)
       : 0;
 
     summary.net_balance = summary.income - summary.expense + summary.gain;
@@ -2274,8 +2274,8 @@ app.post('/api/chatbot/process', authenticateToken, async (req, res) => {
         [req.user.userId]
       );
 
-      const balance = walletResult.rows.length > 0 
-        ? walletResult.rows[0].balance 
+      const balance = walletResult.rows.length > 0
+        ? walletResult.rows[0].balance
         : 0;
 
       response = {
@@ -2293,9 +2293,9 @@ app.post('/api/chatbot/process', authenticateToken, async (req, res) => {
        (user_id, command, input_text, response_text, action_result, related_entity)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
-        req.user.userId, 
-        command, 
-        JSON.stringify(params), 
+        req.user.userId,
+        command,
+        JSON.stringify(params),
         response.message,
         response.action_result,
         response.related_entity
@@ -2320,7 +2320,153 @@ app.post('/api/chatbot/process', authenticateToken, async (req, res) => {
 });
 
 // ============================================
-// 12. DASHBOARD & STATISTICS
+// 12. TRANSACTION HISTORY ENDPOINTS
+// ============================================
+
+// Create transaction history with coupon data
+app.post('/api/transaction-history', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const {
+      order_id,
+      midtrans_order_id,
+      total_amount,
+      discount_amount = 0,
+      coupons_used = [],
+      payment_method = 'midtrans',
+      items = [],
+      status = 'completed' // ✅ Add default status
+    } = req.body;
+
+    if (!order_id || !total_amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID and total amount are required'
+      });
+    }
+
+    await client.query('BEGIN');
+
+    // Insert transaction history
+    const historyResult = await client.query(
+      `INSERT INTO transaction_histories 
+       (user_id, order_id, midtrans_order_id, total_amount, discount_amount, 
+        payment_method, coupons_used, items_data, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [
+        req.user.userId,
+        order_id,
+        midtrans_order_id,
+        total_amount,
+        discount_amount,
+        payment_method,
+        JSON.stringify(coupons_used),
+        JSON.stringify(items),
+        status // ✅ Include status in insert
+      ]
+    );
+
+    // Update financial records only for completed transactions
+    if (status === 'completed') {
+      await client.query(
+        `INSERT INTO financial_records (user_id, type, amount, description, reference_id)
+         VALUES ($1, 'income', $2, $3, $4)`,
+        [
+          req.user.userId,
+          total_amount,
+          `Transaction completed: ${order_id}`,
+          historyResult.rows[0].id
+        ]
+      );
+
+      // Log activity
+      await client.query(
+        `INSERT INTO activity_logs (user_id, activity_type, amount, description)
+         VALUES ($1, 'transaction_completed', $2, $3)`,
+        [
+          req.user.userId,
+          total_amount,
+          `Transaction ${order_id} completed with ${coupons_used.length} coupons`
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      success: true,
+      message: 'Transaction history recorded successfully',
+      data: historyResult.rows[0]
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Create transaction history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to record transaction history',
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Get transaction history
+app.get('/api/transaction-history', authenticateToken, async (req, res) => {
+  try {
+    const { limit = 20, offset = 0, status } = req.query;
+
+    let query = `
+      SELECT th.*, 
+             COUNT(*) OVER() as total_count
+      FROM transaction_histories th
+      WHERE th.user_id = $1
+    `;
+    const params = [req.user.userId];
+
+    if (status) {
+      query += ' AND th.status = $2';
+      params.push(status);
+    }
+
+    query += ' ORDER BY th.created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+    params.push(limit, offset);
+
+    const result = await pool.query(query, params);
+
+    // Parse JSON fields
+    const transactions = result.rows.map(row => ({
+      ...row,
+      coupons_used: typeof row.coupons_used === 'string' ? JSON.parse(row.coupons_used) : row.coupons_used,
+      items_data: typeof row.items_data === 'string' ? JSON.parse(row.items_data) : row.items_data
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        transactions,
+        pagination: {
+          total: result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0,
+          limit: parseInt(limit),
+          offset: parseInt(offset)
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Get transaction history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get transaction history',
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// 13. DASHBOARD & STATISTICS
 // ============================================
 
 // Get dashboard statistics
@@ -2351,6 +2497,28 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
       [req.user.userId]
     );
 
+    // Transaction history stats
+    const transactionHistoryResult = await pool.query(
+      `SELECT 
+         COUNT(*) as total_transactions,
+         SUM(total_amount) as total_transaction_amount,
+         SUM(discount_amount) as total_savings,
+         COUNT(CASE WHEN coupons_used != '[]' AND coupons_used IS NOT NULL THEN 1 END) as transactions_with_coupons
+       FROM transaction_histories
+       WHERE user_id = $1 AND status = 'completed'`,
+      [req.user.userId]
+    );
+
+    // Recent transactions
+    const recentTransactionsResult = await pool.query(
+      `SELECT order_id, total_amount, discount_amount, created_at, coupons_used
+       FROM transaction_histories
+       WHERE user_id = $1 AND status = 'completed'
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [req.user.userId]
+    );
+
     // Wallet balance
     const walletResult = await pool.query(
       'SELECT balance FROM wallets WHERE user_id = $1',
@@ -2365,16 +2533,36 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
       [req.user.userId]
     );
 
+    // Parse recent transactions
+    const recentTransactions = recentTransactionsResult.rows.map(row => ({
+      ...row,
+      coupons_used: typeof row.coupons_used === 'string' ? JSON.parse(row.coupons_used) : row.coupons_used
+    }));
+
+    const transactionStats = transactionHistoryResult.rows[0];
+
     res.json({
       success: true,
       data: {
+        // Store & Product Stats
         total_stores: parseInt(storesResult.rows[0].total),
         total_products: parseInt(productsResult.rows[0].total),
         total_orders: parseInt(ordersResult.rows[0].total_orders),
         total_revenue: parseFloat(ordersResult.rows[0].total_revenue || 0),
+
+        // Transaction History Stats
+        total_transactions: parseInt(transactionStats.total_transactions || 0),
+        total_transaction_amount: parseFloat(transactionStats.total_transaction_amount || 0),
+        total_savings: parseFloat(transactionStats.total_savings || 0),
+        transactions_with_coupons: parseInt(transactionStats.transactions_with_coupons || 0),
+
+        // Financial Stats
         wallet_balance: parseFloat(walletResult.rows[0]?.balance || 0),
         active_investments: parseInt(investmentsResult.rows[0].total),
-        total_invested: parseFloat(investmentsResult.rows[0].total_invested || 0)
+        total_invested: parseFloat(investmentsResult.rows[0].total_invested || 0),
+
+        // Recent Activity
+        recent_transactions: recentTransactions
       }
     });
 
@@ -2492,7 +2680,7 @@ app.listen(PORT, '0.0.0.0', () => {
 ║      GET /api/health                                                  ║
 ╚═══════════════════════════════════════════════════════════════════════╝
   `);
-  
+
   console.log('\n✅ All endpoints are ready!');
   console.log('✅ Old Midtrans endpoints maintained for backward compatibility');
   console.log('✅ New endpoints with database integration available');
