@@ -1,0 +1,37 @@
+{
+  "name": "midtrans-api",
+  "version": "1.0.0",
+  "description": "REST API pembayaran menggunakan Midtrans (QRIS, GoPay, ShopeePay) dengan Express.js",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "lint": "echo \"No lint configured\"",
+    "test": "echo \"No test specified\" && exit 0"
+  },
+  "keywords": [
+    "midtrans",
+    "payment-gateway",
+    "qris",
+    "gopay",
+    "shopeepay",
+    "express",
+    "nodejs",
+    "api"
+  ],
+  "author": "Gabriel Panjaitan",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "midtrans-client": "^1.4.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
